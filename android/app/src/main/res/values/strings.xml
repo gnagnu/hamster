@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Hamster</string>
+    <string name="title_activity_main">Hamster</string>
+    <string name="package_name">com.gnagnu.hamster</string>
+    <string name="custom_url_scheme">com.gnagnu.hamster</string>
+</resources>
