@@ -15,6 +15,8 @@ const LANG_CODES: Record<PlaybackLang, string> = {
   zh: 'zh-CN',
 }
 
+const isNative = !!(window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.()
+
 // Single AudioContext shared across language switches (browsers limit how many you can create)
 let sharedContext: AudioContext | null = null
 function getAudioContext(): AudioContext {
@@ -27,7 +29,6 @@ export function usePlayback(lang: PlaybackLang) {
   const [forceSpeech, setForceSpeech] = useState(false)
   const manifestRef = useRef<SpriteManifest | null>(null)
   const bufferRef = useRef<AudioBuffer | null>(null)
-  const sourceRef = useRef<AudioBufferSourceNode | null>(null)
 
   const mode: PlaybackMode =
     spriteAvailable === 'loading' ? 'loading' :
@@ -64,11 +65,6 @@ export function usePlayback(lang: PlaybackLang) {
   }, [lang])
 
   const speak = useCallback((emoji: Emoji) => {
-    // stop whatever is playing
-    try { sourceRef.current?.stop() } catch { /* already stopped */ }
-    sourceRef.current = null
-    try { window.speechSynthesis?.cancel() } catch { /* unavailable */ }
-
     const entry = mode === 'sprite' ? manifestRef.current?.[emoji.char] : undefined
 
     if (entry && bufferRef.current) {
@@ -78,9 +74,8 @@ export function usePlayback(lang: PlaybackLang) {
       const source = ctx.createBufferSource()
       source.buffer = bufferRef.current
       source.connect(ctx.destination)
-      source.start(0, start, duration) // sample-accurate: no seeking, no keyframe snapping
-      sourceRef.current = source
-    } else if (window.speechSynthesis) {
+      source.start(0, start, duration)
+    } else if (!isNative && window.speechSynthesis) {
       // sprite not available for this language — fall back to Web Speech
       const utterance = new SpeechSynthesisUtterance(emoji[lang])
       utterance.lang = LANG_CODES[lang]

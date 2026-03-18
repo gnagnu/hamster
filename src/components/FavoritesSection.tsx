@@ -137,7 +137,7 @@ export function FavoritesSection({
                     key={emoji.char}
                     emoji={emoji}
                     lang={lang}
-                    onPress={onPress}
+                    onPress={() => {}}
                     onRemove={onRemove}
                   />
                 ))}
