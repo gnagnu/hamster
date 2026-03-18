@@ -35,7 +35,7 @@ function App() {
   const { favorites, addFavorite, removeFavorite, reorderFavorites, clearFavorites } = useFavorites()
 
   const handlePress = useCallback((emoji: Emoji) => {
-    speak(emoji)
+    try { speak(emoji) } catch { /* TTS unavailable */ }
     addFavorite(emoji.char)
   }, [speak, addFavorite])
 
@@ -46,7 +46,7 @@ function App() {
   return (
     <div className="min-h-screen bg-amber-50 flex flex-col">
       {/* Header */}
-      <header className="sticky top-0 z-10 bg-amber-50/90 backdrop-blur border-b border-amber-200 px-4 py-3 flex items-center justify-between">
+      <header className="sticky top-0 z-10 bg-amber-50/90 backdrop-blur border-b border-amber-200 px-4 pb-3 flex items-center justify-between" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 0.75rem)' }}>
         <h1 className="text-xl font-bold text-amber-800 flex items-center gap-2">
           🐹 Hamster
         </h1>

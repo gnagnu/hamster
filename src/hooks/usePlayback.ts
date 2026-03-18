@@ -67,7 +67,7 @@ export function usePlayback(lang: PlaybackLang) {
     // stop whatever is playing
     try { sourceRef.current?.stop() } catch { /* already stopped */ }
     sourceRef.current = null
-    window.speechSynthesis.cancel()
+    try { window.speechSynthesis?.cancel() } catch { /* unavailable */ }
 
     const entry = mode === 'sprite' ? manifestRef.current?.[emoji.char] : undefined
 
@@ -80,7 +80,7 @@ export function usePlayback(lang: PlaybackLang) {
       source.connect(ctx.destination)
       source.start(0, start, duration) // sample-accurate: no seeking, no keyframe snapping
       sourceRef.current = source
-    } else {
+    } else if (window.speechSynthesis) {
       // sprite not available for this language — fall back to Web Speech
       const utterance = new SpeechSynthesisUtterance(emoji[lang])
       utterance.lang = LANG_CODES[lang]
