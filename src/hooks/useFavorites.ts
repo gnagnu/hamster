@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 
 const STORAGE_KEY = 'hamster-favorites'
+const MAX_FAVORITES = 20
 
 function loadFavorites(): string[] {
   try {
@@ -20,8 +21,8 @@ export function useFavorites() {
 
   const addFavorite = useCallback((char: string) => {
     setFavorites(prev => {
-      if (prev.includes(char)) return prev
-      const next = [char, ...prev]
+      // Always move to front (whether new or re-tapped), drop oldest if over limit
+      const next = [char, ...prev.filter(c => c !== char)].slice(0, MAX_FAVORITES)
       saveFavorites(next)
       return next
     })

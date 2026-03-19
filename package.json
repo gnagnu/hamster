@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "postinstall": "python3 -m venv .venv && .venv/bin/pip install --quiet edge-tts",
-    "sprite": "tsx scripts/generate-sprite.ts"
+    "sprite": "tsx scripts/generate-sprite.ts",
+    "emoji-list": "tsx scripts/generate-emoji-list.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

@@ -1,37 +1,31 @@
-import { useState, useCallback } from 'react'
-import { EMOJIS, type Emoji } from './data/emojis'
-import { usePlayback, type PlaybackMode } from './hooks/usePlayback'
+import { useState, useCallback, useMemo } from 'react'
+import { EMOJIS, EMOJI_CATEGORIES, type Emoji } from './data/emojis'
+import { usePlayback } from './hooks/usePlayback'
 import type { PlaybackLang } from './hooks/useSpeech'
 import { useFavorites } from './hooks/useFavorites'
 import { EmojiGrid } from './components/EmojiGrid'
-import { LanguageSelector } from './components/LanguageSelector'
+import { LanguageDialog } from './components/LanguageDialog'
 import { FavoritesSection } from './components/FavoritesSection'
 
-function ModeIndicator({ mode, spriteAvailable, onToggle }: {
-  mode: PlaybackMode
-  spriteAvailable: 'loading' | 'available' | 'unavailable'
-  onToggle: () => void
-}) {
-  if (mode === 'loading') return <span className="text-xs text-amber-400">⏳</span>
+const RANDOM_SIZE = 200
 
-  const canToggle = spriteAvailable === 'available'
-  const label = mode === 'sprite' ? 'Audio sprite — cliquer pour TTS' : 'Web Speech — cliquer pour sprite'
-
-  return (
-    <button
-      onClick={onToggle}
-      disabled={!canToggle}
-      title={canToggle ? label : 'Sprite non disponible pour cette langue'}
-      className={`text-sm transition-opacity ${canToggle ? 'cursor-pointer hover:opacity-60' : 'cursor-default opacity-40'}`}
-    >
-      {mode === 'sprite' ? '🎵' : '🗣️'}
-    </button>
-  )
+function pickRandom(pool: Emoji[], n: number): Emoji[] {
+  const copy = [...pool]
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]]
+  }
+  return copy.slice(0, n)
 }
+
+const RARE_EMOJIS = EMOJIS.filter(e => !e.popular && (e.cat === 'symbols' || e.cat === 'objects' || e.cat === 'travel'))
 
 function App() {
   const [lang, setLang] = useState<PlaybackLang>('fr')
-  const { speak, mode, spriteAvailable, toggleMode } = usePlayback(lang)
+  const [activeCat, setActiveCat] = useState('popular')
+  const [randomSet, setRandomSet] = useState<Emoji[]>(() => pickRandom(EMOJIS, RANDOM_SIZE))
+
+  const { speak, mode } = usePlayback(lang)
   const { favorites, addFavorite, removeFavorite, reorderFavorites, clearFavorites } = useFavorites()
 
   const handlePress = useCallback((emoji: Emoji) => {
@@ -39,24 +33,41 @@ function App() {
     addFavorite(emoji.char)
   }, [speak, addFavorite])
 
+  const handleCatSelect = useCallback((key: string) => {
+    if (key === 'random') setRandomSet(pickRandom(EMOJIS, RANDOM_SIZE))
+    setActiveCat(key)
+  }, [])
+
+  const displayedEmojis = useMemo(() => {
+    switch (activeCat) {
+      case 'popular':  return EMOJIS.filter(e => e.popular)
+      case 'random':   return randomSet
+      case 'rare':     return RARE_EMOJIS
+      default:         return EMOJIS.filter(e => e.cat === activeCat)
+    }
+  }, [activeCat, randomSet])
+
   const favoriteEmojis = favorites
     .map(char => EMOJIS.find(e => e.char === char))
     .filter((e): e is Emoji => e !== undefined)
 
+  const modeLabel = mode === 'sprite' ? '🎵' : mode === 'speech' ? '🗣️' : '⏳'
+
   return (
     <div className="min-h-screen bg-amber-50 flex flex-col">
       {/* Header */}
-      <header className="sticky top-0 z-10 bg-amber-50/90 backdrop-blur border-b border-amber-200 px-4 pb-3 flex items-center justify-between" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 0.75rem)' }}>
+      <header
+        className="sticky top-0 z-10 bg-amber-50/90 backdrop-blur border-b border-amber-200 px-4 pb-3 flex items-center justify-between"
+        style={{ paddingTop: 'calc(env(safe-area-inset-top) + 0.75rem)' }}
+      >
         <h1 className="text-xl font-bold text-amber-800 flex items-center gap-2">
           🐹 Hamster
+          <span className="text-sm font-normal opacity-50" title={`Mode: ${mode}`}>{modeLabel}</span>
         </h1>
-        <div className="flex items-center gap-3">
-          <ModeIndicator mode={mode} spriteAvailable={spriteAvailable} onToggle={toggleMode} />
-          <LanguageSelector value={lang} onChange={setLang} />
-        </div>
+        <LanguageDialog value={lang} onChange={setLang} />
       </header>
 
-      <main className="flex-1 px-4 py-6 max-w-3xl mx-auto w-full space-y-8">
+      <main className="flex-1 px-4 py-6 max-w-3xl mx-auto w-full space-y-6">
         {/* Favorites */}
         <FavoritesSection
           favoriteEmojis={favoriteEmojis}
@@ -68,14 +79,29 @@ function App() {
           onClear={clearFavorites}
         />
 
-        {/* All emojis */}
+        {/* Category picker + emoji grid */}
         <section>
-          <h2 className="text-sm font-semibold text-amber-700 uppercase tracking-wider mb-3">
-            Tous les emojis
-          </h2>
+          {/* Category tabs — horizontally scrollable */}
+          <div className="flex gap-2 overflow-x-auto pb-2 mb-3 scrollbar-hide">
+            {EMOJI_CATEGORIES.map(cat => (
+              <button
+                key={cat.key}
+                onClick={() => handleCatSelect(cat.key)}
+                className={`flex-shrink-0 px-3 py-1.5 rounded-full text-sm font-medium transition-colors cursor-pointer whitespace-nowrap ${
+                  activeCat === cat.key
+                    ? 'bg-amber-600 text-white shadow-sm'
+                    : 'bg-white text-amber-800 border border-amber-200 hover:bg-amber-100'
+                }`}
+              >
+                {cat.fr}
+              </button>
+            ))}
+          </div>
+
+          {/* Grid */}
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-amber-100">
             <EmojiGrid
-              emojis={EMOJIS}
+              emojis={displayedEmojis}
               lang={lang}
               onPress={handlePress}
             />
