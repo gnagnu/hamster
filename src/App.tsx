@@ -32,7 +32,7 @@ const RARE_EMOJIS = EMOJIS.filter(e => !e.popular && (e.cat === 'symbols' || e.c
 function App() {
   const [lang, setLang] = useState<PlaybackLang>('fr')
   const [speed, setSpeed] = useState(1.0)
-  const [activeCat, setActiveCat] = useState('popular')
+  const [activeCat, setActiveCat] = useState('random')
   const [randomSet, setRandomSet] = useState<Emoji[]>(() => pickRandom(EMOJIS, RANDOM_SIZE))
 
   const { speak, mode } = usePlayback(lang, speed)

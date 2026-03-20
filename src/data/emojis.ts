@@ -20,17 +20,17 @@ export interface EmojiCategory {
 }
 
 export const EMOJI_CATEGORIES: EmojiCategory[] = [
+  { key: 'random',     en: 'Random',               fr: 'Aléatoire',           zh: '随机' },
   { key: 'popular',     en: 'Popular',            fr: 'Populaires',          zh: '热门' },
+  { key: 'rare',       en: 'Rare',                 fr: 'Rares',               zh: '罕见' },
+  { key: 'animals',    en: 'Animals & Nature',     fr: 'Animaux & Nature',    zh: '动物与自然' },
   { key: 'smileys',    en: 'Smileys & Emotion',   fr: 'Sourires & Émotion',  zh: '笑脸与情感' },
   { key: 'people',     en: 'People & Body',        fr: 'Personnes & Corps',   zh: '人物与身体' },
-  { key: 'animals',    en: 'Animals & Nature',     fr: 'Animaux & Nature',    zh: '动物与自然' },
   { key: 'food',       en: 'Food & Drink',         fr: 'Nourriture & Boisson',zh: '食物与饮料' },
   { key: 'travel',     en: 'Travel & Places',      fr: 'Voyage & Lieux',      zh: '旅行与地点' },
   { key: 'activities', en: 'Activities',           fr: 'Activités',           zh: '活动' },
   { key: 'objects',    en: 'Objects',              fr: 'Objets',              zh: '物品' },
   { key: 'symbols',    en: 'Symbols',              fr: 'Symboles',            zh: '符号' },
-  { key: 'random',     en: 'Random',               fr: 'Aléatoire',           zh: '随机' },
-  { key: 'rare',       en: 'Rare',                 fr: 'Rares',               zh: '罕见' },
 ]
 
 export const EMOJIS: Emoji[] = [
