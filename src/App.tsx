@@ -1,11 +1,14 @@
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { EMOJIS, EMOJI_CATEGORIES, type Emoji } from './data/emojis'
 import { usePlayback } from './hooks/usePlayback'
 import type { PlaybackLang } from './hooks/useSpeech'
 import { useFavorites } from './hooks/useFavorites'
+import { useBeat } from './hooks/useBeat'
 import { EmojiGrid } from './components/EmojiGrid'
 import { LanguageDialog } from './components/LanguageDialog'
 import { FavoritesSection } from './components/FavoritesSection'
+import { BeatsControl } from './components/BeatsControl'
+import { WaveformVis } from './components/WaveformVis'
 
 const RANDOM_SIZE = 200
 
@@ -22,16 +25,38 @@ const RARE_EMOJIS = EMOJIS.filter(e => !e.popular && (e.cat === 'symbols' || e.c
 
 function App() {
   const [lang, setLang] = useState<PlaybackLang>('fr')
+  const [speed, setSpeed] = useState(1.0)
   const [activeCat, setActiveCat] = useState('popular')
   const [randomSet, setRandomSet] = useState<Emoji[]>(() => pickRandom(EMOJIS, RANDOM_SIZE))
 
-  const { speak, mode } = usePlayback(lang)
+  const { speak, mode } = usePlayback(lang, speed)
   const { favorites, addFavorite, removeFavorite, reorderFavorites, clearFavorites } = useFavorites()
+  const { beats, selectedFilename, select: selectBeat, playing, toggle: toggleBeat,
+          buffer, startTime, taps, recordTap } = useBeat()
+
+  // Category tab auto-scroll to center on mobile
+  const catScrollRef = useRef<HTMLDivElement>(null)
+  const catBtnRefs = useRef<Map<string, HTMLButtonElement>>(new Map())
+
+  useEffect(() => {
+    const container = catScrollRef.current
+    const btn = catBtnRefs.current.get(activeCat)
+    if (!container || !btn) return
+    const center = container.offsetWidth / 2
+    const btnCenter = btn.offsetLeft + btn.offsetWidth / 2
+    container.scrollTo({ left: btnCenter - center, behavior: 'smooth' })
+  }, [activeCat])
 
   const handlePress = useCallback((emoji: Emoji) => {
     try { speak(emoji) } catch { /* TTS unavailable */ }
     addFavorite(emoji.char)
-  }, [speak, addFavorite])
+    recordTap(emoji.char)
+  }, [speak, addFavorite, recordTap])
+
+  const handleFavoritePress = useCallback((emoji: Emoji) => {
+    try { speak(emoji) } catch { /* TTS unavailable */ }
+    recordTap(emoji.char)
+  }, [speak, recordTap])
 
   const handleCatSelect = useCallback((key: string) => {
     if (key === 'random') setRandomSet(pickRandom(EMOJIS, RANDOM_SIZE))
@@ -54,38 +79,51 @@ function App() {
   const modeLabel = mode === 'sprite' ? '🎵' : mode === 'speech' ? '🗣️' : '⏳'
 
   return (
-    <div className="min-h-screen bg-amber-50 flex flex-col">
-      {/* Header */}
-      <header
-        className="sticky top-0 z-10 bg-amber-50/90 backdrop-blur border-b border-amber-200 px-4 pb-3 flex items-center justify-between"
-        style={{ paddingTop: 'calc(env(safe-area-inset-top) + 0.75rem)' }}
-      >
-        <h1 className="text-xl font-bold text-amber-800 flex items-center gap-2">
-          🐹 Hamster
-          <span className="text-sm font-normal opacity-50" title={`Mode: ${mode}`}>{modeLabel}</span>
-        </h1>
-        <LanguageDialog value={lang} onChange={setLang} />
-      </header>
+    <div className="min-h-screen bg-amber-50">
 
-      <main className="flex-1 px-4 py-6 max-w-3xl mx-auto w-full space-y-6">
-        {/* Favorites */}
-        <FavoritesSection
-          favoriteEmojis={favoriteEmojis}
-          favoriteChars={favorites}
-          lang={lang}
-          onPress={handlePress}
-          onRemove={removeFavorite}
-          onReorder={reorderFavorites}
-          onClear={clearFavorites}
-        />
+      {/* Sticky panel: header + all controls above the emoji grid */}
+      <div className="sticky top-0 z-10 bg-amber-50/95 backdrop-blur">
+        <header
+          className="border-b border-amber-200 px-4 pb-3 flex items-center justify-between"
+          style={{ paddingTop: 'calc(env(safe-area-inset-top) + 0.75rem)' }}
+        >
+          <h1 className="text-xl font-bold text-amber-800 flex items-center gap-2">
+            🐹 Hamster
+            <span className="text-sm font-normal opacity-50" title={`Mode: ${mode}`}>{modeLabel}</span>
+          </h1>
+          <LanguageDialog value={lang} onChange={setLang} speed={speed} onSpeedChange={setSpeed} />
+        </header>
 
-        {/* Category picker + emoji grid */}
-        <section>
-          {/* Category tabs — horizontally scrollable */}
-          <div className="flex gap-2 overflow-x-auto pb-2 mb-3 scrollbar-hide">
+        <div className="max-w-3xl mx-auto w-full px-4 pt-4 space-y-4">
+          <BeatsControl
+            beats={beats}
+            selectedFilename={selectedFilename}
+            playing={playing}
+            onSelect={selectBeat}
+            onToggle={toggleBeat}
+          />
+          {buffer && (
+            <WaveformVis buffer={buffer} startTime={startTime} taps={taps} />
+          )}
+          <FavoritesSection
+            favoriteEmojis={favoriteEmojis}
+            favoriteChars={favorites}
+            lang={lang}
+            onPress={handleFavoritePress}
+            onRemove={removeFavorite}
+            onReorder={reorderFavorites}
+            onClear={clearFavorites}
+          />
+          {/* Category tabs */}
+          <div
+            ref={catScrollRef}
+            className="flex gap-2 overflow-x-auto md:flex-wrap pb-3"
+            style={{ scrollbarWidth: 'none' }}
+          >
             {EMOJI_CATEGORIES.map(cat => (
               <button
                 key={cat.key}
+                ref={el => { if (el) catBtnRefs.current.set(cat.key, el); else catBtnRefs.current.delete(cat.key) }}
                 onClick={() => handleCatSelect(cat.key)}
                 className={`flex-shrink-0 px-3 py-1.5 rounded-full text-sm font-medium transition-colors cursor-pointer whitespace-nowrap ${
                   activeCat === cat.key
@@ -97,17 +135,20 @@ function App() {
               </button>
             ))}
           </div>
+        </div>
+      </div>
 
-          {/* Grid */}
-          <div className="bg-white rounded-2xl p-4 shadow-sm border border-amber-100">
-            <EmojiGrid
-              emojis={displayedEmojis}
-              lang={lang}
-              onPress={handlePress}
-            />
-          </div>
-        </section>
-      </main>
+      {/* Emoji grid — normal page flow so the window scrolls and address bar hides */}
+      <div className="max-w-3xl mx-auto w-full px-4 pb-6">
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-amber-100 min-h-screen">
+          <EmojiGrid
+            emojis={displayedEmojis}
+            lang={lang}
+            onPress={handlePress}
+          />
+        </div>
+      </div>
+
     </div>
   )
 }

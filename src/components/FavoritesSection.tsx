@@ -49,7 +49,7 @@ function SortableEmojiItem({
         onClick={() => onPress(emoji)}
         {...attributes}
         {...listeners}
-        className="text-2xl p-1 rounded-xl cursor-grab active:cursor-grabbing select-none leading-none hover:bg-black/10 transition-colors"
+        className="text-4xl p-2 rounded-xl cursor-grab active:cursor-grabbing select-none leading-none hover:bg-black/10 transition-colors"
       >
         {emoji.char}
       </button>
@@ -152,7 +152,7 @@ export function FavoritesSection({
                 title={emoji[lang]}
                 aria-label={emoji[lang]}
                 onClick={() => onPress(emoji)}
-                className="text-2xl p-1 rounded-xl hover:bg-black/10 active:scale-90 transition-transform duration-75 cursor-pointer select-none leading-none"
+                className="text-4xl p-2 rounded-xl hover:bg-black/10 active:scale-90 transition-transform duration-75 cursor-pointer select-none leading-none"
               >
                 {emoji.char}
               </button>

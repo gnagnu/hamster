@@ -27,6 +27,7 @@
  */
 
 import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { writeFileSync, mkdirSync, rmSync, existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { EMOJIS } from '../src/data/emojis.ts'
@@ -46,9 +47,12 @@ type Lang = 'en' | 'fr' | 'zh'
 
 const VOICES: Record<Lang, string> = {
   en: 'en-US-AriaNeural',
-  fr: 'fr-FR-DeniseNeural',
+  fr: 'fr-FR-EloiseNeural',
   zh: 'zh-CN-XiaoxiaoNeural',
 }
+
+const RATE:  Record<Lang, string> = { en: '+0%',  fr: '+10%',  zh: '+0%' }
+const PITCH: Record<Lang, string> = { en: '+0Hz', fr: '+5Hz', zh: '+0Hz' }
 
 /** Silence gap between clips in the sprite (seconds). */
 const GAP_S = 0.15
@@ -93,21 +97,91 @@ function ffprobeFloat(args: string[]): number {
   return parseFloat(r.stdout.trim())
 }
 
-function parseArgs(): { lang: Lang; clean: boolean } {
-  const idx = process.argv.indexOf('--lang')
-  const value = idx !== -1 ? process.argv[idx + 1] : undefined
-  if (!value || !['en', 'fr', 'zh'].includes(value)) {
-    die(`Usage: yarn sprite --lang <en|fr|zh> [--clean]`)
+function arg(name: string): string | undefined {
+  const idx = process.argv.indexOf(name)
+  return idx !== -1 ? process.argv[idx + 1] : undefined
+}
+
+function parseArgs(): { lang: Lang; clean: boolean; test?: { emojis: string; voice: string; rate: string; pitch: string } } {
+  const lang = arg('--lang')
+  if (!lang || !['en', 'fr', 'zh'].includes(lang)) {
+    die(`Usage:\n  yarn sprite --lang <en|fr|zh> [--clean]\n  yarn sprite --lang <en|fr|zh> --test --emojis "🪵⚠️😂" [--voice fr-FR-EloiseNeural] [--rate +20%] [--pitch +5Hz]`)
   }
-  return { lang: value as Lang, clean: process.argv.includes('--clean') }
+  const isTest = process.argv.includes('--test')
+  if (isTest) {
+    const emojis = arg('--emojis') ?? die('--test requires --emojis "🪵⚠️😂"')
+    return {
+      lang: lang as Lang,
+      clean: false,
+      test: {
+        emojis,
+        voice:  arg('--voice') ?? VOICES[lang as Lang],
+        rate:   arg('--rate')  ?? '+0%',
+        pitch:  arg('--pitch') ?? '+0Hz',
+      },
+    }
+  }
+  return { lang: lang as Lang, clean: process.argv.includes('--clean') }
 }
 
 // ── main ──────────────────────────────────────────────────────────────────────
 
 function main() {
-  const { lang, clean } = parseArgs()
-  const voice = VOICES[lang]
+  const { lang, clean, test } = parseArgs()
 
+  // ── test mode ────────────────────────────────────────────────────────────────
+  if (test) {
+    const { emojis, voice, rate, pitch } = test
+    const chars = [...emojis] // split by unicode code point
+    const tmpDir = resolve('.sprite-cache/_test')
+    mkdirSync(tmpDir, { recursive: true })
+
+    const wavPaths: string[] = []
+    for (const char of chars) {
+      const emoji = EMOJIS.find(e => e.char === char)
+      if (!emoji) { console.warn(`  skipping unknown emoji: ${char}`); continue }
+      const text = emoji[lang]
+      console.log(`  ${char}  "${text}"`)
+      const base = join(tmpDir, createHash('sha1').update(`${voice}:${rate}:${pitch}:${text}`).digest('hex').slice(0, 12))
+      const mp3Path = `${base}.mp3`
+      const wavPath = `${base}.wav`
+      if (!existsSync(wavPath)) {
+        runWithRetry(EDGE_TTS, ['--voice', voice, '--rate', rate, '--pitch', pitch, '--text', text, '--write-media', mp3Path])
+        run(FFMPEG, [
+          '-y', '-i', mp3Path,
+          '-af', [
+            `silenceremove=start_periods=1:start_duration=0:start_threshold=${SILENCE_THRESHOLD}`,
+            `areverse`,
+            `silenceremove=start_periods=1:start_duration=0:start_threshold=${SILENCE_THRESHOLD}`,
+            `areverse`,
+          ].join(','),
+          '-ac', '1', '-ar', String(SAMPLE_RATE), '-acodec', 'pcm_s16le',
+          wavPath,
+        ])
+        rmSync(mp3Path)
+      }
+      wavPaths.push(wavPath)
+    }
+
+    const silencePath = join(tmpDir, 'silence.wav')
+    run(FFMPEG, ['-y', '-f', 'lavfi', '-i', `anullsrc=r=${SAMPLE_RATE}:cl=mono`, '-t', String(GAP_S), '-acodec', 'pcm_s16le', silencePath])
+
+    const concatList = join(tmpDir, 'concat.txt')
+    writeFileSync(concatList, wavPaths.flatMap(w => [`file '${w}'`, `file '${silencePath}'`]).join('\n'))
+
+    const outPath = resolve('test-voice.mp3')
+    const masterWav = join(tmpDir, 'master.wav')
+    run(FFMPEG, ['-y', '-f', 'concat', '-safe', '0', '-i', concatList, masterWav])
+    run(FFMPEG, ['-y', '-i', masterWav, '-acodec', 'libmp3lame', '-q:a', '4', outPath])
+    rmSync(masterWav)
+
+    console.log(`\n✓  test-voice.mp3  (voice: ${voice}, rate: ${rate}, pitch: ${pitch})`)
+    console.log(`   Download via VS Code explorer to play locally.`)
+    return
+  }
+
+  // ── normal mode ──────────────────────────────────────────────────────────────
+  const voice = VOICES[lang]
   const cacheDir = resolve(`.sprite-cache/${lang}`)
   const outDir = resolve('public/audio')
 
@@ -132,7 +206,8 @@ function main() {
   for (let i = 0; i < EMOJIS.length; i++) {
     const emoji = EMOJIS[i]
     const text = emoji[lang]
-    const base = join(cacheDir, i.toString().padStart(4, '0'))
+    const hash = createHash('sha1').update(`${lang}:${text}`).digest('hex').slice(0, 12)
+    const base = join(cacheDir, hash)
     const mp3Path = `${base}.mp3`
     const wavPath = `${base}.wav`
 
@@ -142,7 +217,7 @@ function main() {
       process.stdout.write(`[${i + 1}/${EMOJIS.length}] ${emoji.char}  "${text}" ... `)
 
       // TTS → MP3 (retries on transient 503s)
-      runWithRetry(EDGE_TTS, ['--voice', voice, '--text', text, '--write-media', mp3Path])
+      runWithRetry(EDGE_TTS, ['--voice', voice, '--rate', RATE[lang], '--pitch', PITCH[lang], '--text', text, '--write-media', mp3Path])
 
       // MP3 → WAV: PCM, mono, fixed sample rate, leading+trailing silence stripped
       run(FFMPEG, [

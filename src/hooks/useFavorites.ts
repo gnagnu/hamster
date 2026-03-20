@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react'
 
 const STORAGE_KEY = 'hamster-favorites'
-const MAX_FAVORITES = 20
+const MAX_FAVORITES = 10
 
 function loadFavorites(): string[] {
   try {

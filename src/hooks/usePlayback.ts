@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import type { Emoji } from '../data/emojis'
 import { LANG_CODES, SPRITE_LANGS, SPEECH_LANGS } from './useSpeech'
 import type { PlaybackLang } from './useSpeech'
+import { getAudioContext } from '../audio/context'
 
 type SpriteManifest = Record<string, [number, number]> // [startSec, durationSec]
 
@@ -10,14 +11,17 @@ export type SpriteAvailability = 'loading' | 'available' | 'unavailable'
 
 const isNative = !!(window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.()
 
-// Single AudioContext shared across language switches
-let sharedContext: AudioContext | null = null
-function getAudioContext(): AudioContext {
-  if (!sharedContext) sharedContext = new AudioContext()
-  return sharedContext
+// Find the best available voice for a BCP-47 language code.
+// Returns null if the language isn't installed on this device.
+function findVoice(bcp47: string): SpeechSynthesisVoice | null {
+  const voices = window.speechSynthesis?.getVoices() ?? []
+  const prefix = bcp47.split('-')[0]
+  return voices.find(v => v.lang === bcp47)
+      ?? voices.find(v => v.lang.startsWith(prefix))
+      ?? null
 }
 
-export function usePlayback(lang: PlaybackLang) {
+export function usePlayback(lang: PlaybackLang, speed = 1.0) {
   const isSpeechOnly = SPEECH_LANGS.has(lang)
 
   const [spriteAvailable, setSpriteAvailable] = useState<SpriteAvailability>(
@@ -74,6 +78,7 @@ export function usePlayback(lang: PlaybackLang) {
         const source = ctx.createBufferSource()
         source.buffer = bufferRef.current
         source.connect(ctx.destination)
+        source.playbackRate.value = speed
         source.start(0, start, duration)
         return
       }
@@ -81,14 +86,21 @@ export function usePlayback(lang: PlaybackLang) {
 
     // Web Speech fallback (not on native APK)
     if (!isNative && window.speechSynthesis) {
-      const text = emoji[lang as keyof Emoji] as string
+      const targetCode = LANG_CODES[lang]
+      const voice = findVoice(targetCode)
+      // If no voice for this language, fall back to English text + English voice
+      const effectiveLang: PlaybackLang = voice ? lang : 'en'
+      const text = emoji[effectiveLang as keyof Emoji] as string
       const utterance = new SpeechSynthesisUtterance(text)
-      utterance.lang  = LANG_CODES[lang]
-      utterance.rate  = 1.4
-      utterance.pitch = 1.8
+      utterance.lang  = LANG_CODES[effectiveLang]
+      if (voice) utterance.voice = voice
+      // Tonal languages need neutral pitch to preserve tones
+      const tonal = effectiveLang === 'zh'
+      utterance.rate  = (tonal ? 1.0 : 1.4) * speed
+      utterance.pitch = tonal ? 1.0 : 1.8
       window.speechSynthesis.speak(utterance)
     }
-  }, [mode, lang])
+  }, [mode, lang, speed])
 
   return { speak, mode, spriteAvailable }
 }

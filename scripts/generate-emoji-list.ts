@@ -5,7 +5,7 @@
  * Usage: npm run emoji-list
  */
 
-import { readFileSync, writeFileSync } from 'fs'
+import { writeFileSync, readFileSync } from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 
@@ -70,53 +70,79 @@ async function fetchJson(url: string): Promise<Record<string, unknown>> {
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
+// ── Canonical popular set (original 354 curated emojis, commit 13ede9b) ──────
+const POPULAR_CHARS = new Set([
+  '😀','😃','😄','😁','😆','😅','🤣','😂','🙂','🙃','😉','😊','😇','🥰','😍','🤩','😘','😗','😚','😙',
+  '😋','😛','😜','🤪','😝','🤑','🤗','🤭','🤫','🤔','🤐','🤨','😐','😑','😶','😏','😒','🙄','😬','😔',
+  '😪','🤤','😴','😷','🤒','🤕','🤢','🤧','🥵','🥶','😱','😨','😰','😥','😢','😭','😤','😠','😡','🤬',
+  '😈','👿','💀','💩','🤡','👹','👺','👻','👽','🤖','😺','😸','😻','😹','😼','😽','🙀','😿','😾',
+  '👋','🤚','✋','🖐️','👌','🤌','✌️','🤞','🤟','🤘','👍','👎','👊','✊','🤜','🤛','👏','🙌','🤲','🤝','🙏',
+  '💪','🦵','🦶','👂','👃','👀','👅','👄','🧠','🦷',
+  '👶','🧒','👦','👧','🧑','👨','👩','🧓','👴','👵',
+  '❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❣️','💕','💞','💓','💗','💖','💘','💝','💟','☮️','✝️',
+  '⭐','🌟','💫','✨','🔥','💥','💢','💨','💦','💤','🌈','☀️','🌤️','⛅','🌧️','⛈️','🌩️','❄️','🌊','🌙',
+  '🌍','🌎','🌏',
+  '🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐮','🐷','🐸','🐵','🙈','🙉','🙊',
+  '🐔','🐧','🐦','🦆','🦅','🦉','🦇','🐺','🐗','🐴','🦄','🐝','🐛','🦋','🐌','🐞','🐜','🦟',
+  '🐢','🐍','🦎','🐊','🦕','🦖','🐳','🐬','🦈','🐙','🦑','🦞','🦀',
+  '🍎','🍊','🍋','🍇','🍓','🍒','🍑','🍍','🥭','🍌','🍉','🍈','🍐','🥑','🍆','🥦','🥕','🌽','🌶️','🍄','🧅','🧄',
+  '🍞','🥐','🧀','🍖','🍗','🍔','🍟','🍕','🌮','🌯','🍜','🍣','🍱','🍦','🍰','🎂','🍫','🍬','🍭',
+  '☕','🍵','🧃','🥤','🍺','🍷','🥂','🍾',
+  '⚽','🏀','🏈','⚾','🎾','🏐','🏉','🎱','🏓','🏸','🥊','🎯','🎮','🎲','🎭','🎨','🎼','🎵','🎶','🎤','🎧','🎷','🎸','🎹','🥁','🏆','🥇','🎪',
+  '🚀','🛸','✈️','🚂','🚗','🚕','🚌','🏎️','🚲','🛵','⛵','🚢','🏠','🏰','🗼','🗽','⛩️','🏔️','🗻','🏖️','🌴','🌵',
+  '💡','🔦','📱','💻','🖥️','⌨️','🖱️','📷','📺','📻','⌚','📚','✏️','🔑','🔒','🔓','💰','💳','💎',
+  '⚙️','🔧','🔨','⚗️','🔬','🔭','💊','🩺','🎁','🎉','🎊','🎈',
+  '🏳️','🏴','🚩','✅','❌','❓','❗','⬆️','⬇️','➡️','⬅️',
+])
+
+// ── Manual overrides ──────────────────────────────────────────────────────────
+type Overrides = Record<string, Partial<Record<'en'|'fr'|'zh'|'de', string> & { popular: boolean }>>
+const OVERRIDES: Overrides = JSON.parse(
+  readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'overrides.json'), 'utf-8')
+)
+
 async function main() {
   console.log(`Target: ${TARGET} emojis`)
   console.log('Per-category targets:', CAT_TARGETS)
-
-  // 1. Read popular set from git HEAD (the original curated 354 emojis)
-  //    Falls back to current file if git is unavailable
-  let popularSource: string
-  try {
-    const { execSync } = await import('child_process')
-    popularSource = execSync('git show HEAD:src/data/emojis.ts', { cwd: ROOT }).toString()
-    console.log('\nPopular set: reading from git HEAD')
-  } catch {
-    popularSource = readFileSync(join(ROOT, 'src/data/emojis.ts'), 'utf-8')
-    console.log('\nPopular set: reading from current file (git unavailable)')
-  }
-  const popularChars = new Set<string>()
-  for (const m of popularSource.matchAll(/char:\s*'([^']+)'/g)) popularChars.add(m[1])
-  // If the current file was already regenerated (cat field present), popular is baked in
-  const fromRegen = popularSource.includes("cat: '")
-  if (fromRegen) {
-    for (const m of popularSource.matchAll(/\/\/ popular/g)) { /* count only */ }
-    // Re-extract: popular entries have `// popular` comment
-    for (const m of popularSource.matchAll(/char:\s*'([^']+)'[^}]+\/\/ popular/g)) popularChars.add(m[1])
-    console.log(`Popular set: ${popularChars.size} emojis (from regenerated file markers)`)
-  } else {
-    console.log(`Popular set: ${popularChars.size} emojis`)
-  }
+  console.log(`\nPopular set: ${POPULAR_CHARS.size} emojis (hardcoded)`)
+  console.log(`Overrides: ${Object.keys(OVERRIDES).length} entries`)
 
   // 2. Fetch Unicode data
   console.log('\nFetching Unicode data…')
   const emojiTest = await fetchText('https://unicode.org/Public/emoji/latest/emoji-test.txt')
 
-  // 3. Fetch CLDR annotations (EN, FR, ZH)
+  // 3. Fetch CLDR annotations — direct first, then derived (better coverage for ZWJ sequences)
   console.log('\nFetching CLDR annotations…')
-  const CLDR = 'https://raw.githubusercontent.com/unicode-org/cldr-json/main/cldr-json/cldr-annotations-full/annotations'
-  const [enRaw, frRaw, zhRaw, deRaw] = await Promise.all([
-    fetchJson(`${CLDR}/en/annotations.json`),
-    fetchJson(`${CLDR}/fr/annotations.json`),
-    fetchJson(`${CLDR}/zh/annotations.json`),
-    fetchJson(`${CLDR}/de/annotations.json`),
+  const CLDR_DIRECT  = 'https://raw.githubusercontent.com/unicode-org/cldr-json/main/cldr-json/cldr-annotations-full/annotations'
+  const CLDR_DERIVED = 'https://raw.githubusercontent.com/unicode-org/cldr-json/main/cldr-json/cldr-annotations-derived-full/annotationsDerived'
+
+  const [enRaw, frRaw, zhRaw, deRaw, enDerRaw, frDerRaw, zhDerRaw, deDerRaw] = await Promise.all([
+    fetchJson(`${CLDR_DIRECT}/en/annotations.json`),
+    fetchJson(`${CLDR_DIRECT}/fr/annotations.json`),
+    fetchJson(`${CLDR_DIRECT}/zh/annotations.json`),
+    fetchJson(`${CLDR_DIRECT}/de/annotations.json`),
+    fetchJson(`${CLDR_DERIVED}/en/annotations.json`),
+    fetchJson(`${CLDR_DERIVED}/fr/annotations.json`),
+    fetchJson(`${CLDR_DERIVED}/zh/annotations.json`),
+    fetchJson(`${CLDR_DERIVED}/de/annotations.json`),
   ])
 
   type AnnotMap = Record<string, { tts?: string[] }>
-  const enAnn = ((enRaw as any).annotations?.annotations ?? {}) as AnnotMap
-  const frAnn = ((frRaw as any).annotations?.annotations ?? {}) as AnnotMap
-  const zhAnn = ((zhRaw as any).annotations?.annotations ?? {}) as AnnotMap
-  const deAnn = ((deRaw as any).annotations?.annotations ?? {}) as AnnotMap
+  // Merge: direct takes priority over derived
+  const merge = (direct: any, derived: any): AnnotMap => ({
+    ...((derived as any).annotations?.annotations ?? {}),
+    ...((direct  as any).annotations?.annotations ?? {}),
+  })
+  const enAnn = merge(enRaw, enDerRaw)
+  const frAnn = merge(frRaw, frDerRaw)
+  const zhAnn = merge(zhRaw, zhDerRaw)
+  const deAnn = merge(deRaw, deDerRaw)
+
+  // CLDR keys emojis without variation selector (U+FE0F), but emoji-test.txt
+  // gives fully-qualified forms (with U+FE0F). Try both when looking up.
+  function tts(ann: AnnotMap, char: string): string | undefined {
+    return ann[char]?.tts?.[0] ?? ann[char.replace(/\uFE0F/g, '')]?.tts?.[0]
+  }
 
   // 4. Parse emoji-test.txt — also extract inline English name as fallback
   console.log('\nParsing emoji-test.txt…')
@@ -149,7 +175,8 @@ async function main() {
 
     const cat = GROUP_TO_CAT[group] ?? 'symbols'
     if (!allByCategory[cat]) allByCategory[cat] = []
-    allByCategory[cat].push({ char, cat, popular: popularChars.has(char), nameFromFile })
+    const popularOverride = OVERRIDES[char]?.popular
+    allByCategory[cat].push({ char, cat, popular: popularOverride === true ? true : popularOverride === false ? false : POPULAR_CHARS.has(char), nameFromFile })
   }
 
   for (const [cat, arr] of Object.entries(allByCategory)) {
@@ -182,10 +209,10 @@ async function main() {
   let lastCat = ''
 
   for (const { char, cat, popular, nameFromFile } of selected) {
-    const enCldr = enAnn[char]?.tts?.[0]
-    const fr     = frAnn[char]?.tts?.[0]
-    const zh     = zhAnn[char]?.tts?.[0]
-    const de     = deAnn[char]?.tts?.[0]
+    const enCldr = tts(enAnn, char)
+    const fr     = tts(frAnn, char)
+    const zh     = tts(zhAnn, char)
+    const de     = tts(deAnn, char)
 
     // Use CLDR name if available, else fall back to emoji-test.txt name
     const en = enCldr ?? nameFromFile
@@ -194,9 +221,11 @@ async function main() {
     if (!zh)      missingZh++
     if (!de)      missingDe++
 
-    const frVal = fr ?? en
-    const zhVal = zh ?? en
-    const deVal = de ?? en
+    const ov    = OVERRIDES[char] ?? {}
+    const frVal = ov.fr ?? fr ?? en
+    const zhVal = ov.zh ?? zh ?? en
+    const deVal = ov.de ?? de ?? en
+    const enVal = ov.en ?? en
 
     const esc = (s: string) => s.replace(/\\/g, '\\\\').replace(/'/g, "\\'")
 
@@ -206,7 +235,7 @@ async function main() {
     }
 
     const popField = popular ? ', popular: true' : ''
-    lines.push(`  { char: '${esc(char)}', en: '${esc(en)}', fr: '${esc(frVal)}', zh: '${esc(zhVal)}', de: '${esc(deVal)}', cat: '${cat}'${popField} },`)
+    lines.push(`  { char: '${esc(char)}', en: '${esc(enVal)}', fr: '${esc(frVal)}', zh: '${esc(zhVal)}', de: '${esc(deVal)}', cat: '${cat}'${popField} },`)
   }
 
   console.log(`CLDR fallbacks: EN ${missingCldr}, FR ${missingFr}, ZH ${missingZh}, DE ${missingDe}`)
