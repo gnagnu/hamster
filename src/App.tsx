@@ -9,6 +9,12 @@ import { LanguageDialog } from './components/LanguageDialog'
 import { FavoritesSection } from './components/FavoritesSection'
 import { BeatsControl } from './components/BeatsControl'
 import { WaveformVis } from './components/WaveformVis'
+import { Download } from 'lucide-react'
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt(): Promise<void>
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
+}
 
 const RANDOM_SIZE = 200
 
@@ -78,6 +84,23 @@ function App() {
 
   const modeLabel = mode === 'sprite' ? '🎵' : mode === 'speech' ? '🗣️' : '⏳'
 
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null)
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      e.preventDefault()
+      setInstallPrompt(e as BeforeInstallPromptEvent)
+    }
+    window.addEventListener('beforeinstallprompt', handler)
+    return () => window.removeEventListener('beforeinstallprompt', handler)
+  }, [])
+
+  const handleInstall = useCallback(async () => {
+    if (!installPrompt) return
+    await installPrompt.prompt()
+    installPrompt.userChoice.then(() => setInstallPrompt(null))
+  }, [installPrompt])
+
   return (
     <div className="min-h-screen bg-amber-50">
 
@@ -87,11 +110,20 @@ function App() {
           className="border-b border-amber-200 px-4 pb-3 flex items-center justify-between"
           style={{ paddingTop: 'calc(env(safe-area-inset-top) + 0.75rem)' }}
         >
-          <h1 className="text-xl font-bold text-amber-800 flex items-center gap-2">
-            🐹 Hamster
-            <span className="text-sm font-normal opacity-50" title={`Mode: ${mode}`}>{modeLabel}</span>
+          <h1 className="text-xl font-bold text-amber-800 flex items-center gap-1">
+            <button className="cursor-pointer select-none" onClick={() => { const e = EMOJIS.find(e => e.char === '🐹'); if (e) handlePress(e) }}>🐹</button>
+            <button className="cursor-pointer select-none" onClick={() => { const e = EMOJIS.find(e => e.char === '🪵'); if (e) handlePress(e) }}>🪵</button>
+            {' '}Hamster²
           </h1>
-          <LanguageDialog value={lang} onChange={setLang} speed={speed} onSpeedChange={setSpeed} />
+          <div className="flex items-center gap-2">
+            {installPrompt && (
+              <button onClick={handleInstall} title="Installer l'app" className="cursor-pointer opacity-50 hover:opacity-100 transition-opacity">
+                <Download size={18} />
+              </button>
+            )}
+            <span className="text-sm font-normal opacity-50" title={`Mode: ${mode}`}>{modeLabel}</span>
+            <LanguageDialog value={lang} onChange={setLang} speed={speed} onSpeedChange={setSpeed} />
+          </div>
         </header>
 
         <div className="max-w-3xl mx-auto w-full px-4 pt-4 space-y-4">
