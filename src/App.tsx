@@ -9,6 +9,7 @@ import { LanguageDialog } from './components/LanguageDialog'
 import { FavoritesSection } from './components/FavoritesSection'
 import { BeatsControl } from './components/BeatsControl'
 import { WaveformVis } from './components/WaveformVis'
+import { UpdatePrompt } from './components/UpdatePrompt'
 import { Download } from 'lucide-react'
 
 interface BeforeInstallPromptEvent extends Event {
@@ -103,6 +104,7 @@ function App() {
 
   return (
     <div className="min-h-screen bg-amber-50">
+      <UpdatePrompt />
 
       {/* Sticky panel: header + all controls above the emoji grid */}
       <div className="sticky top-0 z-10 bg-amber-50/95 backdrop-blur">
